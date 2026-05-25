@@ -1,48 +1,51 @@
 import streamlit as st
 import google.generativeai as genai
-import pandas as pd
-import io
 
 st.set_page_config(page_title="笔记本调研助手", layout="wide")
-st.title("💻 笔记本竞品自动调研助手 (稳定版)")
+st.title("💻 笔记本竞品自动调研助手 (终极兼容版)")
 
 # 侧边栏
-st.sidebar.header("核心设置")
-api_key = st.sidebar.text_input("第一步：在此输入 API Key", type="password")
+st.sidebar.header("设置")
+api_key = st.sidebar.text_input("第一步：输入你的 API Key", type="password")
 
 if api_key:
     try:
-        # 初始化
+        # 配置 API
         genai.configure(api_key=api_key)
-        # 使用更兼容、更快速的 gemini-1.5-flash 模型
-        model = genai.GenerativeModel('gemini-1.5-flash') 
-
-        st.info("💡 建议：打开网页后按 Ctrl+A 全选，Ctrl+C 复制，然后贴到下面。")
-        raw_text = st.text_area("第二步：粘贴参数文本", height=300, placeholder="在此粘贴网页内容...")
+        
+        # 定义一个“大脑”列表，如果第一个不行，自动换第二个
+        # 很多 404 错误是因为名字不对，我们尝试最常用的几个名字
+        model_names = ['gemini-1.5-flash', 'gemini-pro']
+        
+        st.info("💡 提示：在网页全选 (Ctrl+A) -> 复制 (Ctrl+C) -> 在下方粘贴 (Ctrl+V)。")
+        raw_text = st.text_area("第二步：粘贴网页文本内容", height=300)
 
         if st.button("第三步：开始自动调研"):
             if not raw_text:
-                st.warning("请先粘贴文本内容！")
+                st.warning("请先粘贴内容！")
             else:
-                with st.spinner('AI 正在提取参数，请稍候...'):
-                    # 编写指令，要求返回 Markdown 表格
-                    prompt = f"你是一个笔记本参数专家。请从以下文本中提取22项参数（Model Name, Screen Size, Screen Type, CPU, GPU, DDR, Hard Drive, Battery, Adapter, Camera, Sound, WiFi, Bluetooth, HDMI port, Fingerprint, Body Material, Backlit keyboard, Weight, Thickness, Pre-installed OS, Size, RRP）。只返回一个 Markdown 表格，不要说多余的话。文本内容：\n\n{raw_text}"
-                    
+                success = False
+                for m_name in model_names:
                     try:
-                        response = model.generate_content(prompt)
-                        result_text = response.text
-                        
-                        st.markdown("### ✅ 调研结果")
-                        st.markdown(result_text)
-                        
-                        st.success("分析完成！你可以直接选中上方的表格内容复制到 Excel 中。")
-                        
-                    except Exception as ai_err:
-                        st.error(f"AI 调用失败，具体原因：{str(ai_err)}")
-                        if "location" in str(ai_err).lower():
-                            st.warning("⚠️ 提示：检测到地区限制。请确保你的网络代理已开启，并切换到美国、日本或新加坡节点，然后刷新页面重试。")
+                        with st.spinner(f'正在使用模型 {m_name} 尝试分析...'):
+                            model = genai.GenerativeModel(m_name)
+                            prompt = f"你是一个笔记本专家。请从以下文本中提取参数（Model Name, Screen Size, Screen Type, CPU, GPU, DDR, Hard Drive, Battery, Adapter, Camera, Sound, WiFi, Bluetooth, HDMI port, Fingerprint, Body Material, Backlit keyboard, Weight, Thickness, Pre-installed OS, Size, RRP），并输出Markdown表格。不要说废话。内容：\n\n{raw_text}"
+                            response = model.generate_content(prompt)
+                            
+                            st.markdown("### ✅ 调研结果已生成")
+                            st.markdown(response.text)
+                            st.success(f"调用成功！(使用的是 {m_name} 模型)")
+                            success = True
+                            break # 成功了就跳出循环
+                    except Exception as e:
+                        # 如果这个名字报错 404，就打印出来尝试下一个
+                        st.write(f"尝试模型 {m_name} 失败，准备切换下一个...")
+                        continue
+                
+                if not success:
+                    st.error("所有模型尝试均失败。请检查：1. API Key是否正确；2. 是否开启了全局网络代理。")
 
     except Exception as init_err:
-        st.error(f"系统初始化失败：{str(init_err)}")
+        st.error(f"系统启动错误：{init_err}")
 else:
-    st.info("🔑 请在左侧输入 API Key 开始使用。")
+    st.info("🔑 请在左侧输入 API Key。")
